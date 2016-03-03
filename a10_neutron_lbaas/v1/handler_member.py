@@ -33,14 +33,16 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
                                                c.device_cfg['use_float'])
         server_name = self._meta_name(member, server_ip)
 
+        admin_state = 'enable'
         status = c.client.slb.UP
         if not member['admin_state_up']:
             status = c.client.slb.DOWN
+            admin_state = 'disable'
 
         try:
             server_args = {'server': self.meta(member, 'server', {})}
             c.client.slb.server.create(server_name, server_ip,
-                                       axapi_args=server_args)
+                                       axapi_args=server_args,admin_state=admin_state)
         except (acos_errors.Exists, acos_errors.AddressSpecifiedIsInUse):
             pass
 
