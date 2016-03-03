@@ -33,8 +33,8 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
                                                c.device_cfg['use_float'])
         server_name = self._meta_name(member, server_ip)
 
-        admin_state = 'enable'
         status = c.client.slb.UP
+        admin_state = 'enable'
         if not member['admin_state_up']:
             status = c.client.slb.DOWN
             admin_state = 'disable'
@@ -69,10 +69,16 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
             server_name = self._meta_name(member, server_ip)
 
             status = c.client.slb.UP
+            admin_state = 'enable'
             if not member['admin_state_up']:
                 status = c.client.slb.DOWN
+                admin_state = 'disable'
 
             try:
+                server_args = {'server': self.meta(member, 'server', {})}
+                c.client.slb.server.update(server_name, server_ip,
+                                           axapi_args=server_args,admin_state=admin_state)
+
                 member_args = {'member': self.meta(member, 'member', {})}
                 c.client.slb.service_group.member.update(
                     self._pool_name(context, member['pool_id']),
