@@ -79,13 +79,25 @@ class PoolHandler(handler_base_v1.HandlerBaseV1):
                 vip = self.neutron.vip_get(context, vip_id)
                 name = self.meta(vip, 'vip_name', vip['id'])
                 r = c.client.slb.virtual_server.stats(name)
+                service_group = c.client.slb.service_group.get(pool_id).get('service-group')
+                members = {}
+                for m in service_group.get('member-list'):
+                        member_status = c.client.slb.service_group.member.get_oper(pool_id,m.get("name"),m.get("port"))
+                        status = 'ACTIVE'
+                        LOG.debug("Status: "+member_status.get("member").get("oper").get("state"))
+                        if member_status.get("member").get("oper").get("state") != 'UP':
+                                status = 'INACTIVE'
+                        members[m.get("name")] = {"status": status}
+
                 return {
-                    "bytes_in": r["virtual_server_stat"]["req_bytes"],
-                    "bytes_out": r["virtual_server_stat"]["resp_bytes"],
-                    "active_connections":
-                        r["virtual_server_stat"]["cur_conns"],
-                    "total_connections": r["virtual_server_stat"]["tot_conns"]
+                    "bytes_in": 1,
+                    "bytes_out": 1,
+                    "active_connections":1,
+                    "total_connections": 1,
+                    "members":members
                 }
+
+
             except Exception:
                 return {
                     "bytes_in": 0,
