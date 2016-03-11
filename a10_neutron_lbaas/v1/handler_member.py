@@ -23,7 +23,7 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
         #tenant_label = member['tenant_id'][:5]
         #addr_label = str(ip_address).replace(".", "_", 4)
         #server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
-        server_name = member['tenant_id']
+        server_name = member['id']
         return server_name
 
     def _meta_name(self, member, ip_address):
