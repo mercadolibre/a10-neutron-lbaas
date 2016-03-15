@@ -48,9 +48,10 @@ class A10OpenstackLBBase(object):
                  neutron_hooks_module=None,
                  barbican_client=None,
                  db_operations_class=operations.Operations,
-                 inventory_class=inventory.InventoryBase):
+                 inventory_class=inventory.InventoryBase,
+                 config_name='config'):
         self.openstack_driver = openstack_driver
-        self.config = a10_config.A10Config()
+        self.config = a10_config.A10Config(config_name)
         self.neutron = neutron_hooks_module
         self.barbican_client = barbican_client
         self.db_operations_class = db_operations_class

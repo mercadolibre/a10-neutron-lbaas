@@ -15,6 +15,7 @@
 import logging
 import os
 import sys
+import imp
 
 import a10_neutron_lbaas.install.blank_config as blank_config
 
@@ -33,20 +34,21 @@ class A10Config(object):
         "method": "hash"
     }
 
-    def __init__(self):
+    def __init__(self, config_name="config"):
         if os.path.exists('/etc/a10'):
             d = '/etc/a10'
         else:
             d = '/etc/neutron/services/loadbalancer/a10networks'
         self.config_dir = os.environ.get('A10_CONFIG_DIR', d)
-        self.config_path = os.path.join(self.config_dir, "config.py")
+        self.config_path = os.path.join(self.config_dir, config_name+'.py')
 
         real_sys_path = sys.path
         sys.path = [self.config_dir]
         try:
             try:
-                import config
-                self.config = config
+                #import config
+                f,path,description = imp.find_module(config_name)
+                self.config = imp.load_module('config',f,path,description)
             except ImportError:
                 LOG.error("A10Config couldn't find config.py in %s", self.config_dir)
                 self.config = blank_config
