@@ -14,7 +14,7 @@
 
 import logging
 
-from a10_neutron_lbaas.acos import openstack_mappings
+from a10_neutron_lbaas import a10_openstack_map as a10_os
 import acos_client.errors as acos_errors
 import handler_base_v1
 import v1_context as a10
@@ -30,8 +30,8 @@ class PoolHandler(handler_base_v1.HandlerBaseV1):
 
         set_method(
             self._meta_name(pool),
-            protocol=openstack_mappings.service_group_protocol(c, pool['protocol']),
-            lb_method=openstack_mappings.service_group_lb_method(c, pool['lb_method']),
+            protocol=a10_os.service_group_protocol(c, pool['protocol']),
+            lb_method=a10_os.service_group_lb_method(c, pool['lb_method']),
             axapi_args=args)
 
     def create(self, context, pool):
@@ -79,13 +79,24 @@ class PoolHandler(handler_base_v1.HandlerBaseV1):
                 vip = self.neutron.vip_get(context, vip_id)
                 name = self.meta(vip, 'vip_name', vip['id'])
                 r = c.client.slb.virtual_server.stats(name)
+                service_group = c.client.slb.service_group.get_oper(pool_id).get('service-group')
+                members = {}
+                for m in service_group.get('member-list'):
+                    member_status = m.get('oper').get('state')
+                    status = 'ACTIVE'
+                    if member_status != 'UP':
+                       status='INACTIVE'
+                    members[m.get("name")] = {"status": status}
+
                 return {
-                    "bytes_in": r["virtual_server_stat"]["req_bytes"],
-                    "bytes_out": r["virtual_server_stat"]["resp_bytes"],
-                    "active_connections":
-                        r["virtual_server_stat"]["cur_conns"],
-                    "total_connections": r["virtual_server_stat"]["tot_conns"]
+                    "bytes_in": 1,
+                    "bytes_out": 1,
+                    "active_connections":1,
+                    "total_connections": 1,
+                    "members":members
                 }
+
+
             except Exception:
                 return {
                     "bytes_in": 0,
