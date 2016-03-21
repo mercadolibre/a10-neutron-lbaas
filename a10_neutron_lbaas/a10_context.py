@@ -85,10 +85,10 @@ class A10WriteContext(A10Context):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None:
-            try:
+            #try:
                 #self.client.system.action.write_memory()
-            except acos_errors.InvalidSessionID:
-                pass
+            #except acos_errors.InvalidSessionID:
+            #    pass
 
             for v in self.device_cfg.get('ha_sync_list', []):
                 self.client.ha.sync(v['ip'], v['username'], v['password'])
