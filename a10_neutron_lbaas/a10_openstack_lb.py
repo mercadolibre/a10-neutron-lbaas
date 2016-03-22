@@ -51,7 +51,7 @@ class A10OpenstackLBBase(object):
         self.client_expiration_time = int(time.time()) + CLIENT_CACHE_TIME 
         LOG.info("A10-neutron-lbaas: initializing, version=%s, acos_client=%s",
                  version.VERSION, acos_client.VERSION)
-
+        self.my_id = time.time()
         if self.config.verify_appliances:
             self._verify_appliances()
 
@@ -63,17 +63,16 @@ class A10OpenstackLBBase(object):
     def _get_a10_client(self, device_info):
         d = device_info
         
-        if not self.temp_client or int(time.time()) > self.client_expiration_time  :
-            if self.temp_client:
-                self.temp_client.session.close()
+        if not self.temp_client:
             self.temp_client = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
                                   port=d['port'], protocol=d['protocol'])
-            LOG.info("A new client was created")
-            self.client_expiration_time = int(time.time()) + CLIENT_CACHE_TIME 
-
-        return self.temp_client
+            LOG.info("Driver ["+self.my_id+"] A new client was created")
+            return self.temp_client
+        else:
+            LOG.info("Driver ["+self.my_id+"] A client was reused")
+            return self.temp_client
 
     def _verify_appliances(self):
         LOG.info("A10Driver: verifying appliances")
