@@ -66,11 +66,11 @@ class A10OpenstackLBBase(object):
         if not self.temp_client or int(time.time()) > self.client_expiration_time  :
             if self.temp_client:
                 self.temp_client.session.close()
-                
             self.temp_client = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
                                   port=d['port'], protocol=d['protocol'])
+            LOG.info("A new client was created")
             self.client_expiration_time = int(time.time()) + CLIENT_CACHE_TIME 
 
         return self.temp_client
