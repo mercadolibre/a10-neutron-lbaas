@@ -18,6 +18,8 @@ import a10_config
 import acos_client
 import plumbing_hooks as hooks
 import version
+import time
+
 
 import v1.handler_hm
 import v1.handler_member
@@ -33,6 +35,7 @@ import v2.handler_pool
 logging.basicConfig()
 LOG = logging.getLogger(__name__)
 
+CLIENT_CACHE_TIME = 60
 
 class A10OpenstackLBBase(object):
 
@@ -44,7 +47,8 @@ class A10OpenstackLBBase(object):
         self.config = a10_config.A10Config()
         self.neutron = neutron_hooks_module
         self.barbican_client = barbican_client
-
+        self.temp_client = None
+        self.client_expiration_time = int(time.time()) + CLIENT_CACHE_TIME 
         LOG.info("A10-neutron-lbaas: initializing, version=%s, acos_client=%s",
                  version.VERSION, acos_client.VERSION)
 
@@ -58,10 +62,18 @@ class A10OpenstackLBBase(object):
 
     def _get_a10_client(self, device_info):
         d = device_info
-        return acos_client.Client(d['host'],
+        
+        if not self.temp_client or int(time.time()) > self.client_expiration_time  :
+            if self.temp_client:
+                self.temp_client.session.close()
+                
+            self.temp_client = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
                                   port=d['port'], protocol=d['protocol'])
+            self.client_expiration_time = int(time.time()) + CLIENT_CACHE_TIME 
+
+        return self.temp_client
 
     def _verify_appliances(self):
         LOG.info("A10Driver: verifying appliances")
