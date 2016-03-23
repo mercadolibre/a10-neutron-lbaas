@@ -43,6 +43,7 @@ def signal_handler(obj):
     def handler(*args):
         LOG.info("Handling singla")
         obj.__del__()
+    return handler
 
 class A10OpenstackLBBase(object):
 
