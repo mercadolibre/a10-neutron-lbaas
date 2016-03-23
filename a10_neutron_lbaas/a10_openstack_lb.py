@@ -29,10 +29,12 @@ import v2.handler_lb
 import v2.handler_listener
 import v2.handler_member
 import v2.handler_pool
-
+import time
+import uuid
+import random
 logging.basicConfig()
 LOG = logging.getLogger(__name__)
-
+MAX_ACOS_CACHE_TIME = 60
 
 class A10OpenstackLBBase(object):
 
@@ -44,7 +46,9 @@ class A10OpenstackLBBase(object):
         self.config = a10_config.A10Config()
         self.neutron = neutron_hooks_module
         self.barbican_client = barbican_client
-
+        self.my_id=str(uuid.uuid1())+"-"+str(int(random.random()*1000))
+        self.acos_client_internal = None
+        self.last_acos_client_creation = int(time.time())
         LOG.info("A10-neutron-lbaas: initializing, version=%s, acos_client=%s",
                  version.VERSION, acos_client.VERSION)
 
@@ -58,10 +62,16 @@ class A10OpenstackLBBase(object):
 
     def _get_a10_client(self, device_info):
         d = device_info
-        return acos_client.Client(d['host'],
+        if (self.acos_client_internal == None) or (self.last_acos_client_creation + MAX_ACOS_CACHE_TIME < int(time.time())):
+            self.last_acos_client_creation = int(time.time())
+            if self.acos_client_internal:
+                self.acos_client_internal.session.close()
+            LOG.debug("Creating new acos client on [driver_id:"+self.my_id+"]")
+            self.acos_client_internal = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
                                   port=d['port'], protocol=d['protocol'])
+        return self.acos_client_internal
 
     def _verify_appliances(self):
         LOG.info("A10Driver: verifying appliances")
