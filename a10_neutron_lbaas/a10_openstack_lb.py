@@ -30,9 +30,19 @@ import v2.handler_listener
 import v2.handler_member
 import v2.handler_pool
 import time
+import signal
+import sys
+import atexit
+import threading
+
 logging.basicConfig()
 LOG = logging.getLogger(__name__)
 MAX_ACOS_CACHE_TIME = 60
+
+def signal_handler(obj):
+    def handler(*args):
+        LOG.info("Handling singla")
+        obj.__del__()
 
 class A10OpenstackLBBase(object):
 
@@ -48,26 +58,36 @@ class A10OpenstackLBBase(object):
         self.last_acos_client_creation = int(time.time())
         LOG.info("A10-neutron-lbaas: initializing, version=%s, acos_client=%s",
                  version.VERSION, acos_client.VERSION)
-
+        self.my_lock = threading.Lock()
         if self.config.verify_appliances:
             self._verify_appliances()
-
         self.hooks = plumbing_hooks_class(self)
+        signal.signal(15, signal_handler(self))
+        atexit.register(signal_handler(self))
 
     def _select_a10_device(self, tenant_id):
         return self.hooks.select_device(tenant_id)
 
     def _get_a10_client(self, device_info):
         d = device_info
-        if (self.acos_client_internal == None) or (self.last_acos_client_creation + MAX_ACOS_CACHE_TIME < int(time.time())):
-            self.last_acos_client_creation = int(time.time())
-            if self.acos_client_internal:
-                self.acos_client_internal.session.close()
-            self.acos_client_internal = acos_client.Client(d['host'],
+        #Thread safe
+        with self.my_lock:
+            if (self.acos_client_internal is None) or (self.last_acos_client_creation + MAX_ACOS_CACHE_TIME < int(time.time())):
+                self.last_acos_client_creation = int(time.time())
+                if self.acos_client_internal:
+                    self.acos_client_internal.session.close()
+                    self.acos_client_internal = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
                                   port=d['port'], protocol=d['protocol'])
-        return self.acos_client_internal
+            return self.acos_client_internal
+
+    def __del__(self):
+        LOG.info("A10Driver: Deletting remaining acos sessions")
+        if self.acos_client_internal:
+            LOG.info("Session found, deletting")
+            self.acos_client_internal.session.close()
+        LOG.info("A10Driver: Sessions deleted")
 
     def _verify_appliances(self):
         LOG.info("A10Driver: verifying appliances")
