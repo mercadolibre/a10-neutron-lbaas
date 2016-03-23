@@ -66,7 +66,7 @@ class A10OpenstackLBBase(object):
             self.last_acos_client_creation = int(time.time())
             if self.acos_client_internal:
                 self.acos_client_internal.session.close()
-            LOG.debug("Creating new acos client on [driver_id:"+self.my_id+"]")
+            LOG.info("Creating new acos client on [driver_id:"+self.my_id+"]")
             self.acos_client_internal = acos_client.Client(d['host'],
                                   d.get('api_version', acos_client.AXAPI_21),
                                   d['username'], d['password'],
@@ -147,4 +147,3 @@ class A10OpenstackLBV1(A10OpenstackLBBase):
     @property
     def hm(self):
         return v1.handler_hm.HealthMonitorHandler(self)
-
