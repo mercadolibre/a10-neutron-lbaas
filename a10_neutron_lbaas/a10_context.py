@@ -45,7 +45,8 @@ class A10Context(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         try:
-            self.client.session.close()
+            LOG.debug("Session not closed after call!!")
+            #self.client.session.close()
         except acos_errors.InvalidSessionID:
             pass
 
@@ -85,14 +86,8 @@ class A10WriteContext(A10Context):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None:
-            #try:
-                #self.client.system.action.write_memory()
-            #except acos_errors.InvalidSessionID:
-            #    pass
-
             for v in self.device_cfg.get('ha_sync_list', []):
                 self.client.ha.sync(v['ip'], v['username'], v['password'])
-
         super(A10WriteContext, self).__exit__(exc_type, exc_value, traceback)
 
 
