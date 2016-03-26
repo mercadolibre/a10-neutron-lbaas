@@ -34,6 +34,7 @@ import signal
 import sys
 import atexit
 import threading
+import os
 
 logging.basicConfig()
 LOG = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ MAX_ACOS_CACHE_TIME = 60
 
 def signal_handler(obj):
     def handler(*args):
-        LOG.info("Handling singla")
+        LOG.info("Handling signal")
         obj.__del__()
     return handler
 
@@ -63,31 +64,80 @@ class A10OpenstackLBBase(object):
         if self.config.verify_appliances:
             self._verify_appliances()
         self.hooks = plumbing_hooks_class(self)
-        signal.signal(15, signal_handler(self))
-        atexit.register(signal_handler(self))
+        self.signal_handler_registered = False
+        self.acos_clients = {}
+        LOG.info("PID creating "+str(os.getpid()))
 
     def _select_a10_device(self, tenant_id):
         return self.hooks.select_device(tenant_id)
 
     def _get_a10_client(self, device_info):
         d = device_info
-        #Thread safe
-        with self.my_lock:
-            if (self.acos_client_internal is None) or (self.last_acos_client_creation + MAX_ACOS_CACHE_TIME < int(time.time())):
-                self.last_acos_client_creation = int(time.time())
-                if self.acos_client_internal:
-                    self.acos_client_internal.session.close()
-                self.acos_client_internal = acos_client.Client(d['host'],
-                                  d.get('api_version', acos_client.AXAPI_21),
-                                  d['username'], d['password'],
-                                  port=d['port'], protocol=d['protocol'])
-            return self.acos_client_internal
+        d_key = d['host']+'-'+str(d['port'])
+
+        ### The signal is registered here because in some time the process is forked
+        ### So you lost variable references
+        if not self.signal_handler_registered:
+            signal.signal(signal.SIGTERM, signal_handler(self))
+            signal.signal(signal.SIGHUP, signal_handler(self))
+            signal.signal(signal.SIGINT, signal_handler(self))
+            self.signal_handler_registered = True
+            LOG.info("PID registering "+str(os.getpid()))
+
+        if d_key in self.acos_clients:
+            cli = self.acos_clients[d_key]
+            if cli['last_acos_client_creation'] + MAX_ACOS_CACHE_TIME < int(time.time()):
+                LOG.info("Creating a new  acos_client");
+                acos_client = self._create_new_acos_client(cli['device_info'])
+                if acos_client is not None:
+                    old_acos = cli['acos_client']
+                    cli['acos_client'] = acos_client
+                    cli['last_acos_client_creation'] = int(time.time())
+                    self._close_old_a10_client(old_acos)
+                    LOG.info("New Acos Client created successfully")
+            return cli['acos_client']
+        else:
+            acos_client = self._create_new_acos_client(d)
+            self.acos_clients[d_key] = {'device_info':d,'acos_client':acos_client,'last_acos_client_creation':int(time.time())}
+            return acos_client
+
+
+    def _create_new_acos_client(self, d, sleep_time_on_error=0.5):
+        client = acos_client.Client(d['host'],
+                          d.get('api_version', acos_client.AXAPI_21),
+                          d['username'], d['password'],
+                          port=d['port'], protocol=d['protocol'])
+        final_client = None
+        for i in range(1,10):
+            if(client.session.id is not None):
+                final_client = client
+                break
+            else:
+                time.sleep(sleep_time_on_error)
+
+        return final_client
+
+
+    def _close_old_a10_client(self, a10_client,sleep_time_on_error=10):
+        LOG.info("DELETING session")
+        for i in range(1,10):
+            r = a10_client.session.close()
+            if r is not None:
+                LOG.info(r)
+                LOG.info("A10 session destroyed")
+                break
+            else:
+                LOG.error("Error closing sesion")
+                time.sleep(sleep_time_on_error)
 
     def __del__(self):
+        LOG.info("PID deletting "+str(os.getpid()))
         LOG.info("A10Driver: Deletting remaining acos sessions")
-        if self.acos_client_internal:
-            LOG.info("Session found, deletting")
-            self.acos_client_internal.session.close()
+        LOG.info(self.acos_clients)
+        for cli_key in self.acos_clients:
+            cli = self.acos_clients[cli_key]
+            threading.Thread(target=self._close_old_a10_client, args=(cli['acos_client'],)).start()
+        time.sleep(10)
         LOG.info("A10Driver: Sessions deleted")
 
     def _verify_appliances(self):
