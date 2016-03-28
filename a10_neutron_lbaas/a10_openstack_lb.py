@@ -122,13 +122,12 @@ class A10OpenstackLBBase(object):
     def _close_old_a10_client(self, a10_client,sleep_time_on_error=0.5):
         LOG.info("DELETING session")
         for i in range(1,10):
-            r = a10_client.session.close()
-            if r is not None:
-                LOG.info(r)
-                LOG.info("A10 session destroyed")
+            r = a10_client.session.close() or {}
+            if r.get('response',{}).get('status','') == 'OK':
+                LOG.info("A10 Driver session destroyed: "+str(r))
                 break
             else:
-                LOG.error("Error closing sesion")
+                LOG.info("A10 Driver Error closing session: "+str(r))
                 time.sleep(sleep_time_on_error)
 
     def __del__(self):
