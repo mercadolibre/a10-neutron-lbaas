@@ -85,17 +85,18 @@ class A10OpenstackLBBase(object):
             LOG.info("PID registering "+str(os.getpid()))
 
         if d_key in self.acos_clients:
-            cli = self.acos_clients[d_key]
-            if cli['last_acos_client_creation'] + MAX_ACOS_CACHE_TIME < int(time.time()):
-                LOG.info("Creating a new  acos_client");
-                acos_client = self._create_new_acos_client(cli['device_info'])
-                if acos_client is not None:
-                    old_acos = cli['acos_client']
-                    cli['acos_client'] = acos_client
-                    cli['last_acos_client_creation'] = int(time.time())
-                    self._close_old_a10_client(old_acos)
-                    LOG.info("New Acos Client created successfully")
-            return cli['acos_client']
+            with self.my_lock:
+                cli = self.acos_clients[d_key]
+                if cli['last_acos_client_creation'] + MAX_ACOS_CACHE_TIME < int(time.time()):
+                    LOG.info("Creating a new  acos_client");
+                    acos_client = self._create_new_acos_client(cli['device_info'])
+                    if acos_client is not None:
+                        old_acos = cli['acos_client']
+                        cli['acos_client'] = acos_client
+                        cli['last_acos_client_creation'] = int(time.time())
+                        self._close_old_a10_client(old_acos)
+                        LOG.info("New Acos Client created successfully")
+                return cli['acos_client']
         else:
             acos_client = self._create_new_acos_client(d)
             self.acos_clients[d_key] = {'device_info':d,'acos_client':acos_client,'last_acos_client_creation':int(time.time())}
@@ -118,7 +119,7 @@ class A10OpenstackLBBase(object):
         return final_client
 
 
-    def _close_old_a10_client(self, a10_client,sleep_time_on_error=10):
+    def _close_old_a10_client(self, a10_client,sleep_time_on_error=0.5):
         LOG.info("DELETING session")
         for i in range(1,10):
             r = a10_client.session.close()
