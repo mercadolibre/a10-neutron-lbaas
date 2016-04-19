@@ -24,6 +24,12 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
         #addr_label = str(ip_address).replace(".", "_", 4)
         #server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
         server_name = member['id']
+        if self.a10_driver.config.get('member_name_use_uuid'):
+            return member['id']
+
+        tenant_label = member['tenant_id'][:5]
+        addr_label = str(ip_address).replace(".", "_", 4)
+        server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
         return server_name
 
     def _meta_name(self, member, ip_address):
@@ -43,7 +49,12 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
         try:
             server_args = {'server': self.meta(member, 'server', {})}
             c.client.slb.server.create(server_name, server_ip,
+<<<<<<< HEAD
                                        axapi_args=server_args,admin_state=admin_state)
+=======
+                                       status=status,
+                                       axapi_args=server_args)
+>>>>>>> b46fde0b4495111c0087cc615c72859d2161993d
         except (acos_errors.Exists, acos_errors.AddressSpecifiedIsInUse):
             pass
 

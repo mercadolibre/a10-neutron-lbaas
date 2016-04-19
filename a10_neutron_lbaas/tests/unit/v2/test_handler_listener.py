@@ -17,7 +17,7 @@ import mock
 import test_base
 
 import a10_neutron_lbaas.a10_exceptions as a10_ex
-import neutron_lbaas.services.loadbalancer.constants as lbaas_const
+from a10_neutron_lbaas import constants
 
 
 LOG = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class TestListeners(test_base.UnitTestBase):
                         self.assertTrue('fake-listen-id-001' in s)
                         self.assertTrue('port=2222' in s)
                         test_prot = p
-                        if p in ('HTTPS', lbaas_const.PROTOCOL_TERMINATED_HTTPS):
+                        if p in ('HTTPS', constants.PROTOCOL_TERMINATED_HTTPS):
                             test_prot = 'TCP'
                         self.assertTrue(test_prot in s)
 
@@ -121,7 +121,7 @@ class TestListeners(test_base.UnitTestBase):
         version here and just expect it to work.
         """
 
-        for k, v in self.a.config.devices.items():
+        for k, v in self.a.config.get_devices().items():
             v['api_version'] = api_ver
             v['autosnat'] = autosnat
 
@@ -166,7 +166,7 @@ class TestListeners(test_base.UnitTestBase):
         expected_tuple = axapi_mappings.ipinip_dictionary.get(api_ver)
         saw_exception = False
 
-        for k, v in self.a.config.devices.items():
+        for k, v in self.a.config.get_devices().items():
             v['ipinip'] = ip_in_ip
             v['api_version'] = api_ver
 

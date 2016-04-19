@@ -10,24 +10,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+# Please refer to a10_neutron_lbaas.etc.config for documentation
+# about these settings.
 
 GLOBAL_DEFAULTS = {
-    # Should the driver check that A10 appliances are alive before
-    # successfully initializing?
     "verify_appliances": False,
-
-    # Should the driver store some meta-info in a database?
-    # Needed for tenant<->appliance persistence if the number of appliances
-    # is changed for any reason.
     "use_database": False,
-
-    # The SQLAlchemy connection string to use to connect to the database.
-    # If None, and use_database is True, the driver will attempt to use
-    # the configured neutron database.
     "database_connection": None,
-
-    # Sometimes we need things fro neutron
     "neutron_conf_dir": '/etc/neutron',
+    "member_name_use_uuid": False,
 }
 
 DEVICE_REQUIRED_FIELDS = [
@@ -41,10 +32,14 @@ DEVICE_OPTIONAL_DEFAULTS = {
     "port": 443,
     "api_version": "2.1",
     "status": True,
-    "autosnat": True,
+    "autosnat": False,
     "v_method": "LSI",
     "shared_partition": "shared",
     "use_float": False,
+    "default_virtual_server_vrid": None,
+    "ipinip": False,
+    "ha_sync_list": [],
+    "write_memory": True,
 
     # "max_instance": 5000,
     # "method": "hash",
