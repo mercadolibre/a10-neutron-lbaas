@@ -111,16 +111,15 @@ class TestLB(test_base.UnitTestBase):
     def test_delete_removes_slb(self):
         m = test_base.FakeLoadBalancer()
         self.a.lb.delete(None, m)
-        self.a.db_operations_mock.delete_slb_v2.assert_called_with(m.id)
 
     def test_refresh(self):
         try:
-            self.a.lb.refresh(None, test_base.FakeModel())
+            self.a.lb.refresh(None, test_base.FakeLoadBalancer())
         except a10_ex.UnsupportedFeature:
             pass
 
     def test_stats(self):
-        self.a.lb.stats(None, test_base.FakeModel())
+        self.a.lb.stats(None, test_base.FakeLoadBalancer())
         self.print_mocks()
         # self.a.last_client.slb.virtual_server.stats.assert_called_with(
         #     'fake-id-001')

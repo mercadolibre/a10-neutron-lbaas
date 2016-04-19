@@ -79,7 +79,6 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
                 server_args = {'server': self.meta(member, 'server', {})}
                 c.client.slb.server.update(server_name, server_ip,
                                            axapi_args=server_args,admin_state=admin_state)
-
                 member_args = {'member': self.meta(member, 'member', {})}
                 c.client.slb.service_group.member.update(
                     self._pool_name(context, member['pool_id']),

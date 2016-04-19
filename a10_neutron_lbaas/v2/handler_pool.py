@@ -1,4 +1,4 @@
-# Copyright 2014, Doug Wiegley (dougwig), A10 Networks
+# Copyright 2014-2016, Doug Wiegley (dougwig), A10 Networks
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -15,7 +15,7 @@
 import copy
 import logging
 
-from a10_neutron_lbaas import a10_openstack_map as a10_os
+from a10_neutron_lbaas.acos import openstack_mappings
 import acos_client.errors as acos_errors
 import handler_base_v2
 import handler_persist
@@ -26,15 +26,13 @@ LOG = logging.getLogger(__name__)
 
 class PoolHandler(handler_base_v2.HandlerBaseV2):
 
-    def _set(self, set_method, c, context, pool):
-        p = handler_persist.PersistHandler(c, context, pool)
-        p.create()
-
+    def _set(self, set_method, c, context, pool, old_pool=None):
+        self._update_session_persistence(old_pool, pool, c, context)
         args = {'service_group': self.meta(pool, 'service_group', {})}
         set_method(
             self._meta_name(pool),
-            protocol=a10_os.service_group_protocol(c, pool.protocol),
-            lb_method=a10_os.service_group_lb_method(c, pool.lb_algorithm),
+            protocol=openstack_mappings.service_group_protocol(c, pool.protocol),
+            lb_method=openstack_mappings.service_group_lb_method(c, pool.lb_algorithm),
             axapi_args=args)
 
         # session persistence might need a vport update
@@ -59,8 +57,9 @@ class PoolHandler(handler_base_v2.HandlerBaseV2):
 
     def update(self, context, old_pool, pool):
         with a10.A10WriteStatusContext(self, context, pool) as c:
+
             self._set(c.client.slb.service_group.update,
-                      c, context, pool)
+                      c, context, pool, old_pool)
 
     def delete(self, context, pool):
         with a10.A10DeleteContext(self, context, pool) as c:
@@ -84,3 +83,29 @@ class PoolHandler(handler_base_v2.HandlerBaseV2):
 
             handler_persist.PersistHandler(
                 c, context, pool, self._meta_name(pool)).delete()
+
+    def _update_session_persistence(self, old_pool, pool, c, context):
+        # didn't exist, does exist, create
+        if not old_pool or (not old_pool.session_persistence and pool.session_persistence):
+            p = handler_persist.PersistHandler(c, context, pool, old_pool)
+            p.create()
+            return
+
+        # existed, change, delete and recreate
+        if (old_pool.session_persistence and pool.session_persistence and
+                old_pool.session_persistence.type != pool.session_persistence.type):
+            p = handler_persist.PersistHandler(c, context, old_pool)
+            p.delete()
+            p = handler_persist.PersistHandler(c, context, pool)
+            p.create()
+            return
+
+        # didn't exist, does exist now, create
+        if old_pool.session_persistence and not pool.session_persistence:
+            p = handler_persist.PersistHandler(c, context, pool)
+            p.create()
+            return
+
+        # didn't exist, doesn't exist
+        # did exist, does exist, didn't change
+        return

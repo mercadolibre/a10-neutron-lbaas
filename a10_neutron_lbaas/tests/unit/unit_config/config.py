@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+verify_appliances = True
+
 devices = {
     "ax1": {
         "name": "ax1",
@@ -105,7 +107,7 @@ devices = {
     "axipinip": {
         "host": "10.48.5.219",
         "protocol": "https",
-        "user": "admin",
+        "username": "admin",
         "password": "a10",
         "status": True,
         "api_version": "2.1",

@@ -1,4 +1,4 @@
-# Copyright 2014, Doug Wiegley (dougwig), A10 Networks
+# Copyright 2014-2016 A10 Networks
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -12,21 +12,22 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
 import mock
 import test_base
 
-from a10_neutron_lbaas import a10_common
 import a10_neutron_lbaas.a10_exceptions as a10_ex
+from a10_neutron_lbaas.acos import axapi_mappings
 
 
 class TestVIP(test_base.UnitTestBase):
     def __init__(self, *args):
         super(TestVIP, self).__init__(*args)
 
-    def fake_vip(self, pers=None):
+    def fake_vip(self, pers="", vip_id="id1"):
         h = {
             'tenant_id': 'ten1',
-            'id': 'id1',
+            'id': vip_id,
             'protocol': 'HTTP',
             'admin_state_up': True,
             'address': '1.1.1.1',
@@ -56,8 +57,6 @@ class TestVIP(test_base.UnitTestBase):
 
     def test_create_adds_slb(self):
         self.a.vip.create(None, self.fake_vip())
-        added_id = self.a.db_operations_mock.add.call_args[0][0].vip_id
-        self.assertEqual('id1', added_id)
 
     def test_create_unsupported(self):
         try:
@@ -90,7 +89,7 @@ class TestVIP(test_base.UnitTestBase):
             v['api_version'] = api_ver
             v['autosnat'] = autosnat
 
-        expected_tuple = a10_common.auto_dictionary.get(api_ver, None)
+        expected_tuple = axapi_mappings.auto_dictionary.get(api_ver, None)
 
         vip = self.fake_vip()
         if expected_tuple is not None:
@@ -157,7 +156,7 @@ class TestVIP(test_base.UnitTestBase):
         vip = self.fake_vip()
         expected = None
 
-        expected_tuple = a10_common.ipinip_dictionary.get(api_ver, None)
+        expected_tuple = axapi_mappings.ipinip_dictionary.get(api_ver, None)
         for k, v in self.a.config.devices.items():
             v['ipinip'] = ip_in_ip
             v['api_version'] = api_ver
@@ -198,16 +197,43 @@ class TestVIP(test_base.UnitTestBase):
             None, 'pool1')
         self.assertTrue('HTTP' in s)
 
+    def test_update_delete_pers(self):
+        vip_id = "id2"
+        self.a.vip.update(None, self.fake_vip('SOURCE_IP', vip_id=vip_id), self.fake_vip())
+        self.print_mocks()
+        s = str(self.a.last_client.mock_calls)
+        self.assertTrue('vport.update' in s)
+        self.assertTrue('id1' in s)
+        self.assertTrue('UP' in s)
+        self.a.openstack_driver.plugin.get_pool.assert_called_with(None, 'pool1')
+        z = self.a.last_client.slb.template.src_ip_persistence.delete
+        z.assert_called_with(vip_id)
+        self.assertTrue('HTTP' in s)
+
+    def test_update_change_pers(self):
+        vip_id = "id2"
+        self.a.vip.update(None, self.fake_vip('SOURCE_IP', vip_id=vip_id),
+                          self.fake_vip('HTTP_COOKIE'))
+        self.print_mocks()
+        s = str(self.a.last_client.mock_calls)
+        self.assertTrue('vport.update' in s)
+        self.assertTrue('id1' in s)
+        self.assertTrue('UP' in s)
+        self.a.openstack_driver.plugin.get_pool.assert_called_with(None, 'pool1')
+        z = self.a.last_client.slb.template.cookie_persistence.create
+        z.assert_called_with("id1")
+        self.assertTrue('HTTP' in s)
+
     def test_delete(self):
         self.a.vip.delete(None, self.fake_vip())
         self.a.last_client.slb.virtual_server.delete.assert_called_with('id1')
 
     def test_delete_removes_slb(self):
         self.a.vip.delete(None, self.fake_vip())
-        self.a.db_operations_mock.delete_slb_v1.assert_called_with('id1')
 
     def test_delete_pers(self):
-        self.a.vip.delete(None, self.fake_vip('SOURCE_IP'))
-        self.a.last_client.slb.virtual_server.delete.assert_called_with('id1')
+        vip_id = "idx"
+        self.a.vip.delete(None, self.fake_vip('SOURCE_IP', vip_id=vip_id))
+        self.a.last_client.slb.virtual_server.delete.assert_called_with(vip_id)
         z = self.a.last_client.slb.template.src_ip_persistence.delete
-        z.assert_called_with('id1')
+        z.assert_called_with(vip_id)

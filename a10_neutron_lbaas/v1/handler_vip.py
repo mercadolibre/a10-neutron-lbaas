@@ -14,10 +14,9 @@
 
 import logging
 
-from a10_neutron_lbaas import a10_common
 import a10_neutron_lbaas.a10_exceptions as a10_ex
-import a10_neutron_lbaas.a10_openstack_map as a10_os
-import a10_neutron_lbaas.db.models as models
+from a10_neutron_lbaas.acos import axapi_mappings
+from a10_neutron_lbaas.acos import openstack_mappings
 
 import acos_client.errors as acos_errors
 import handler_base_v1
@@ -71,7 +70,7 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
             try:
                 vip_meta = self.meta(vip, 'virtual_server', {})
                 vport_list = vip_meta.pop('vport_list', None)
-                vip_args = a10_common._virtual_server(vip_meta, c.device_cfg)
+                vip_args = axapi_mappings._virtual_server(vip_meta, c.device_cfg)
                 c.client.slb.virtual_server.create(
                     self._meta_name(vip),
                     vip['address'],
@@ -86,11 +85,11 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
             for vport, i in zip(vport_list, range(len(vport_list))):
                 try:
                     vport_name = str(i) if i else ''
-                    vport_args = a10_common._vport(vport, c.device_cfg)
+                    vport_args = axapi_mappings._vport(vport, c.device_cfg)
                     c.client.slb.virtual_server.vport.create(
                         self._meta_name(vip),
                         self._meta_name(vip) + '_VPORT' + vport_name,
-                        protocol=a10_os.vip_protocols(c, vip['protocol']),
+                        protocol=openstack_mappings.vip_protocols(c, vip['protocol']),
                         port=vip['protocol_port'],
                         service_group_name=pool_name,
                         s_pers_name=p.s_persistence(),
@@ -100,11 +99,6 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
                 except acos_errors.Exists:
                     pass
 
-            slb = models.default(
-                models.A10SLBV1,
-                vip_id=vip['id'],
-                a10_appliance=c.appliance)
-            c.db_operations.add(slb)
             self.hooks.after_vip_create(c, context, vip)
 
     def update(self, context, old_vip, vip):
@@ -115,7 +109,7 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
 
             pool_name = self._pool_name(context, vip['pool_id'])
 
-            p = PersistHandler(c, context, vip, self._meta_name(vip))
+            p = PersistHandler(c, context, vip, self._meta_name(vip), old_vip)
             p.create()
 
             templates = self.meta(vip, "template", {})
@@ -133,11 +127,11 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
                     axapi_args=args)
 
             vport_meta = self.vport_meta(vip)
-            vport_args = a10_common._vport(vport_meta, c.device_cfg)
+            vport_args = axapi_mappings._vport(vport_meta, c.device_cfg)
             c.client.slb.virtual_server.vport.update(
                 self._meta_name(vip),
                 self._meta_name(vip) + '_VPORT',
-                protocol=a10_os.vip_protocols(c, vip['protocol']),
+                protocol=openstack_mappings.vip_protocols(c, vip['protocol']),
                 port=vip['protocol_port'],
                 service_group_name=pool_name,
                 s_pers_name=p.s_persistence(),
@@ -154,7 +148,6 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
             pass
 
         PersistHandler(c, context, vip, self._meta_name(vip)).delete()
-        c.db_operations.delete_slb_v1(vip['id'])
 
     def delete(self, context, vip):
         with a10.A10DeleteContext(self, context, vip) as c:
@@ -164,24 +157,29 @@ class VipHandler(handler_base_v1.HandlerBaseV1):
 
 class PersistHandler(object):
 
-    def __init__(self, c, context, vip, vip_name):
+    def __init__(self, c, context, vip, vip_name, old_vip=None):
         self.c = c
         self.context = context
         self.vip = vip
         self.c_pers = None
         self.s_pers = None
         self.name = vip_name
+        self.old_vip = old_vip
 
-        if vip.get('session_persistence', None) is not None:
-            self.sp = vip['session_persistence']
+        self.sp_obj_dict = {
+            'HTTP_COOKIE': "cookie_persistence",
+            'SOURCE_IP': "src_ip_persistence",
+        }
+
+        self.sp = vip.get("session_persistence")
+
+        if self.sp is not None:
             if self.sp['type'] == 'HTTP_COOKIE':
                 self.c_pers = self.name
             elif self.sp['type'] == 'SOURCE_IP':
                 self.s_pers = self.name
             else:
                 raise a10_ex.UnsupportedFeature()
-        else:
-            self.sp = None
 
     def c_persistence(self):
         return self.c_pers
@@ -190,33 +188,36 @@ class PersistHandler(object):
         return self.s_pers
 
     def create(self):
-        if self.sp is None:
-            return
+        if self.old_vip is not None:
+            vip_sp = self.old_vip.get("session_persistence")
+            if vip_sp is not None:
 
-        methods = {
-            'HTTP_COOKIE':
-                self.c.client.slb.template.cookie_persistence.create,
-            'SOURCE_IP':
-                self.c.client.slb.template.src_ip_persistence.create,
-        }
-        if self.sp['type'] in methods:
-            try:
-                methods[self.sp['type']](self.name)
-            except acos_errors.Exists:
-                pass
+                try:
+                    vip_sp_type = vip_sp.get("type")
+                    m = getattr(self.c.client.slb.template, self.sp_obj_dict[vip_sp_type])
+                    m.delete(self.old_vip.get("id"))
+                except acos_errors.NotExists:
+                    pass
+
+        if self.sp is not None:
+            sp_type = self.sp.get("type")
+            if sp_type is not None and sp_type in self.sp_obj_dict:
+                try:
+                    m = getattr(self.c.client.slb.template, self.sp_obj_dict[sp_type])
+                    m.create(self.name)
+                except acos_errors.Exists:
+                    pass
 
     def delete(self):
+
         if self.sp is None:
             return
 
-        methods = {
-            'HTTP_COOKIE':
-                self.c.client.slb.template.cookie_persistence.delete,
-            'SOURCE_IP':
-                self.c.client.slb.template.src_ip_persistence.delete,
-        }
-        if self.sp['type'] in methods:
+        sp_type = self.sp.get("type")
+        if sp_type in self.sp_obj_dict.keys():
             try:
-                methods[self.sp['type']](self.name)
-            except Exception:
-                pass
+                m = getattr(self.c.client.slb.template, self.sp_obj_dict[sp_type])
+                m.delete(self.name)
+
+            except Exception as e:
+                LOG.exception(e)
