@@ -18,6 +18,8 @@ import os
 import sys
 import imp
 
+from debtcollector import removals
+
 from a10_neutron_lbaas import a10_exceptions as a10_ex
 from a10_neutron_lbaas.etc import config as blank_config
 from a10_neutron_lbaas.etc import defaults
@@ -44,38 +46,41 @@ class A10Config(object):
         venv_d = os.path.join(sys.prefix, 'etc/a10')
         has_prefix = (hasattr(sys, 'real_prefix') or hasattr(sys, 'base_prefix'))
 
+        env_override = os.environ.get('A10_CONFIG_DIR', None)
         if config_dir is not None:
             d = config_dir
+        elif env_override is not None:
+            d = env_override
         elif has_prefix and os.path.exists(venv_d):
             d = venv_d
         elif os.path.exists('/etc/neutron/services/loadbalancer/a10networks'):
             d = '/etc/neutron/services/loadbalancer/a10networks'
         else:
             d = '/etc/a10'
-        self.config_dir = os.environ.get('A10_CONFIG_DIR', d)
-        self.config_path = os.path.join(self.config_dir, config_name+'.py')
+        self._config_dir = os.environ.get('A10_CONFIG_DIR', d)
+        self._config_path = os.path.join(self.config_dir, config_name+'.py')
 
         real_sys_path = sys.path
-        sys.path = [self.config_dir]
+        sys.path = [self._config_dir]
         try:
             try:
                 #import config
                 f,path,description = imp.find_module(config_name)
-                self.config = imp.load_module('config',f,path,description)
+                self._config = imp.load_module('config',f,path,description)
             except ImportError:
-                LOG.error("A10Config could not find %s/config.py", self.config_dir)
-                self.config = blank_config
+                LOG.error("A10Config could not find %s/config.py", self._config_dir)
+                self._config = blank_config
 
             # Global defaults
             for dk, dv in defaults.GLOBAL_DEFAULTS.items():
-                if not hasattr(self.config, dk):
+                if not hasattr(self._config, dk):
                     LOG.debug("setting global default %s=%s", dk, dv)
-                    setattr(self.config, dk, dv)
+                    setattr(self._config, dk, dv)
                 else:
-                    LOG.debug("global setting %s=%s", dk, getattr(self.config, dk))
+                    LOG.debug("global setting %s=%s", dk, getattr(self._config, dk))
 
-            self.devices = {}
-            for k, v in self.config.devices.items():
+            self._devices = {}
+            for k, v in self._config.devices.items():
                 if 'status' in v and not v['status']:
                     LOG.debug("status is False, skipping dev: %s", v)
                 else:
@@ -86,29 +91,32 @@ class A10Config(object):
                             raise a10_ex.InvalidDeviceConfig(msg)
 
                     v['key'] = k
-                    self.devices[k] = v
+                    self._devices[k] = v
 
                     # Old configs had a name field
                     if 'name' not in v:
-                        self.devices[k]['name'] = k
+                        self._devices[k]['name'] = k
 
                     # Figure out port and protocol
-                    protocol = self.devices[k].get('protocol', 'https')
-                    port = self.devices[k].get(
+                    protocol = self._devices[k].get('protocol', 'https')
+                    port = self._devices[k].get(
                         'port', {'http': 80, 'https': 443}[protocol])
-                    self.devices[k]['protocol'] = protocol
-                    self.devices[k]['port'] = port
+                    self._devices[k]['protocol'] = protocol
+                    self._devices[k]['port'] = port
 
                     # Device defaults
                     for dk, dv in defaults.DEVICE_OPTIONAL_DEFAULTS.items():
-                        if dk not in self.devices[k]:
-                            self.devices[k][dk] = dv
+                        if dk not in self._devices[k]:
+                            self._devices[k][dk] = dv
 
-                    LOG.debug("A10Config, device %s=%s", k, self.devices[k])
+                    LOG.debug("A10Config, device %s=%s", k, self._devices[k])
 
             # Setup db foo
-            if self.config.use_database and self.config.database_connection is None:
-                self.config.database_connection = self._get_neutron_db_string()
+            if self._config.use_database and self._config.database_connection is None:
+                self._config.database_connection = self._get_neutron_db_string()
+
+            # Setup some backwards compat stuff
+            self.config = OldConfig(self)
 
         finally:
             sys.path = real_sys_path
@@ -118,7 +126,7 @@ class A10Config(object):
     # shoot this manual parser in the head and just use the global config
     # object.
     def _get_neutron_db_string(self):
-        neutron_conf_dir = os.environ.get('NEUTRON_CONF_DIR', self.config.neutron_conf_dir)
+        neutron_conf_dir = os.environ.get('NEUTRON_CONF_DIR', self._config.neutron_conf_dir)
         neutron_conf = '%s/neutron.conf' % neutron_conf_dir
 
         z = None
@@ -137,17 +145,59 @@ class A10Config(object):
         LOG.debug("using %s as db connect string", z)
         return z
 
+    def get(self, key):
+        return getattr(self._config, key)
+
+    def get_device(self, device_name):
+        return self._devices[device_name]
+
+    def get_devices(self):
+        return self._devices
+
+    # backwards compat
+    @removals.remove
+    @property
+    def devices(self):
+        return self.config.devices
+
+    @removals.remove
     @property
     def use_database(self):
         return self.config.use_database
 
+    @removals.remove
     @property
     def database_connection(self):
         return self.config.database_connection
 
+    @removals.remove
     @property
     def verify_appliances(self):
-        if hasattr(self.config, 'verify_appliances'):
-            return self.config.verify_appliances
-        else:
-            return True
+        return self.config.verify_appliances
+
+
+# backwards compat
+class OldConfig(object):
+
+    def __init__(self, main_config):
+        self._config = main_config
+
+    @removals.remove
+    @property
+    def devices(self):
+        return self._config.get_devices()
+
+    @removals.remove
+    @property
+    def use_database(self):
+        return self._config.get('use_database')
+
+    @removals.remove
+    @property
+    def database_connection(self):
+        return self._config.get('database_connection')
+
+    @removals.remove
+    @property
+    def verify_appliances(self):
+        return self._config.get('verify_appliances')

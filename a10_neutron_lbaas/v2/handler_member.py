@@ -12,15 +12,30 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
+import binascii
+import logging
+import re
+
 import acos_client.errors as acos_errors
 import handler_base_v2
 import v2_context as a10
+# tenant names allow some funky characters; we do not, as of 4.1.0
+non_alpha = re.compile('[^0-9a-zA-Z_-]')
+
+LOG = logging.getLogger(__name__)
 
 
 class MemberHandler(handler_base_v2.HandlerBaseV2):
 
     def _get_name(self, member, ip_address):
+        if self.a10_driver.config.get('member_name_use_uuid'):
+            return member.id
+
         tenant_label = member.tenant_id[:5]
+        if non_alpha.search(tenant_label) is not None:
+            # This corner-case likely only occurs with silly unit tests
+            tenant_label = binascii.hexlify(tenant_label)
         addr_label = str(ip_address).replace(".", "_", 4)
         server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
         return server_name
@@ -40,6 +55,7 @@ class MemberHandler(handler_base_v2.HandlerBaseV2):
         try:
             server_args = {'server': self.meta(member, 'server', {})}
             c.client.slb.server.create(server_name, server_ip,
+                                       status=status,
                                        axapi_args=server_args)
         except (acos_errors.Exists, acos_errors.AddressSpecifiedIsInUse):
             pass
@@ -106,3 +122,27 @@ class MemberHandler(handler_base_v2.HandlerBaseV2):
     def delete(self, context, member):
         with a10.A10DeleteContext(self, context, member) as c:
             self._delete(c, context, member)
+
+    def stats(self, context, member):
+        retval = {
+            "servers_up": 0,
+            "servers_down": 0,
+            "servers_disable": 0,
+            "servers_total": 0
+        }
+
+        try:
+            with a10.A10Context(self, context, member) as c:
+                server_ip = self.neutron.member_get_ip(context, member,
+                                                       c.device_cfg['use_float'])
+                server_name = self._meta_name(member, server_ip)
+
+                stats = c.client.slb.service_group.member.stats(name=server_name)
+                retval = stats
+
+        except Exception as ex:
+            LOG.exception(ex)
+        finally:
+            pass
+
+        return retval

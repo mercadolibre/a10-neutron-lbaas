@@ -20,10 +20,12 @@ import v1_context as a10
 class MemberHandler(handler_base_v1.HandlerBaseV1):
 
     def _get_name(self, member, ip_address):
-        #tenant_label = member['tenant_id'][:5]
-        #addr_label = str(ip_address).replace(".", "_", 4)
-        #server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
-        server_name = member['id']
+        if self.a10_driver.config.get('member_name_use_uuid'):
+            return member['id']
+
+        tenant_label = member['tenant_id'][:5]
+        addr_label = str(ip_address).replace(".", "_", 4)
+        server_name = "_%s_%s_neutron" % (tenant_label, addr_label)
         return server_name
 
     def _meta_name(self, member, ip_address):
@@ -43,6 +45,7 @@ class MemberHandler(handler_base_v1.HandlerBaseV1):
         try:
             server_args = {'server': self.meta(member, 'server', {})}
             c.client.slb.server.create(server_name, server_ip,
+                                       status=status,
                                        axapi_args=server_args,admin_state=admin_state)
         except (acos_errors.Exists, acos_errors.AddressSpecifiedIsInUse):
             pass

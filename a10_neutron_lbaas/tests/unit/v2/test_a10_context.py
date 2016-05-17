@@ -52,9 +52,15 @@ class TestA10Context(test_base.UnitTestBase):
             self.empty_close_mocks()
 
     def test_write(self):
-        with a10.A10WriteContext(self.handler, self.ctx, self.m) as c:
+        with a10.A10WriteContext(self.handler, self.ctx, self.m, device_name='ax-write') as c:
             c
-        self.a.last_client.system.action.write_memory.assert_called_with()
+        self.a.last_client.system.action.write_memory.assert_called()
+        self.a.last_client.session.close.assert_called_with()
+
+    def test_write_no_write(self):
+        with a10.A10WriteContext(self.handler, self.ctx, self.m, device_name='ax-nowrite') as c:
+            c
+        self.a.last_client.system.action.write_memory.assert_not_called()
         self.a.last_client.session.close.assert_called_with()
 
     def test_write_e(self):
@@ -112,12 +118,12 @@ class TestA10ContextADP(TestA10Context):
         self.reset_v_method('lsi')
 
     def reset_v_method(self, val):
-        for k, v in self.a.config.devices.items():
+        for k, v in self.a.config.get_devices().items():
             v['v_method'] = val
 
     def _test_alternate_partition(self, use_alternate=False):
-        expected = self.a.config.devices["axadp-alt"].get("shared_partition",
-                                                          "shared")
+        expected = self.a.config.get_device("axadp-alt").get("shared_partition",
+                                                             "shared")
 
         self.m.tenant_id = expected if use_alternate else "get-off-my-lawn"
         with a10.A10Context(self.handler, self.ctx, self.m,
