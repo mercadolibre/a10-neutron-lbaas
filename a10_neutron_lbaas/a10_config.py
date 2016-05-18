@@ -39,16 +39,17 @@ class A10Config(object):
         "method": "hash"
     }
 
-    def __init__(self, config_dir=None):
+    def __init__(self, config_name='config'):
         # Look for config in the virtual environment
         # virtualenv puts the original prefix in sys.real_prefix
         # pyenv puts it in sys.base_prefix
         venv_d = os.path.join(sys.prefix, 'etc/a10')
         has_prefix = (hasattr(sys, 'real_prefix') or hasattr(sys, 'base_prefix'))
-
         env_override = os.environ.get('A10_CONFIG_DIR', None)
-        if config_dir is not None:
-            d = config_dir
+        if config_name is None:
+            config_name = 'config'
+        if config_name is not None:
+            d = config_name
         elif env_override is not None:
             d = env_override
         elif has_prefix and os.path.exists(venv_d):
@@ -58,17 +59,15 @@ class A10Config(object):
         else:
             d = '/etc/a10'
         self._config_dir = os.environ.get('A10_CONFIG_DIR', d)
-        self._config_path = os.path.join(self.config_dir, config_name+'.py')
 
         real_sys_path = sys.path
         sys.path = [self._config_dir]
         try:
             try:
-                #import config
                 f,path,description = imp.find_module(config_name)
-                self._config = imp.load_module('config',f,path,description)
-            except ImportError:
-                LOG.error("A10Config could not find %s/config.py", self._config_dir)
+                self._config = imp.load_module(config_name,f,path,description)
+            except ImportError as e:
+                LOG.error("A10Config could not find %s/%s", self._config_dir, config_name)
                 self._config = blank_config
 
             # Global defaults

@@ -48,18 +48,12 @@ def signal_handler(obj):
 
 class A10OpenstackLBBase(object):
 
-    def __init__(self, openstack_driver,
+    def __init__(self, openstack_driver, config_name="config",
                  plumbing_hooks_class=hooks.PlumbingHooks,
-                 neutron_hooks_module=None,
-                 barbican_client=None,
-                 db_operations_class=operations.Operations,
-                 inventory_class=inventory.InventoryBase,
-                 config_name='config',
-                 barbican_client=None):
+                 neutron_hooks_module=None):
         self.openstack_driver = openstack_driver
         self.config = a10_config.A10Config(config_name)
         self.neutron = neutron_hooks_module
-        self.barbican_client = barbican_client
         self.acos_client_internal = None
         self.last_acos_client_creation = int(time.time())
         LOG.info("A10-neutron-lbaas: initializing, version=%s, acos_client=%s",
