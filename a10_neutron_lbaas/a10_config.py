@@ -48,13 +48,14 @@ class A10Config(object):
         env_override = os.environ.get('A10_CONFIG_DIR', None)
         if config_name is None:
             config_name = 'config'
-        if config_name is not None:
-            d = config_name
-        elif env_override is not None:
-            d = env_override
-        elif has_prefix and os.path.exists(venv_d):
-            d = venv_d
-        elif os.path.exists('/etc/neutron/services/loadbalancer/a10networks'):
+        #if config_name is not None:
+        #    d = config_name
+        #elif env_override is not None:
+        #    d = env_override
+        #elif has_prefix and os.path.exists(venv_d):
+        #    d = venv_d
+        #elif os.path.exists('/etc/neutron/services/loadbalancer/a10networks'):
+        if os.path.exists('/etc/neutron/services/loadbalancer/a10networks'):
             d = '/etc/neutron/services/loadbalancer/a10networks'
         else:
             d = '/etc/a10'
@@ -66,6 +67,7 @@ class A10Config(object):
             try:
                 f,path,description = imp.find_module(config_name)
                 self._config = imp.load_module(config_name,f,path,description)
+                LOG.info("config loaded succesfuly: " + str(config_name))
             except ImportError as e:
                 LOG.error("A10Config could not find %s/%s", self._config_dir, config_name)
                 self._config = blank_config
