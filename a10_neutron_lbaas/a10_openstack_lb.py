@@ -171,8 +171,7 @@ class A10OpenstackLBV2(A10OpenstackLBBase):
         return v2.handler_listener.ListenerHandler(
             self,
             self.openstack_driver.listener,
-            neutron=self.neutron,
-            barbican_client=self.barbican_client)
+            neutron=self.neutron)
 
     @property
     def pool(self):
