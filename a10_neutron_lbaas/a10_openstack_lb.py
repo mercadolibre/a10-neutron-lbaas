@@ -72,7 +72,7 @@ class A10OpenstackLBBase(object):
     def _get_a10_client(self, device_info):
         d = device_info
         d_key = d['host']+'-'+str(d['port'])
-
+        LOG.error("device info:" + d_key + " -----  " + str(d))
         ### The signal is registered here because in some time the process is forked
         ### So you lost variable references
         if not self.signal_handler_registered:
@@ -82,28 +82,28 @@ class A10OpenstackLBBase(object):
             self.signal_handler_registered = True
             LOG.info("PID registering "+str(os.getpid()))
 
-        if d_key in self.acos_clients:
+        if self.acos_clients.has_key(d_key):
+            LOG.debug("d_key in self.acos_clients")
             with self.my_lock:
                 cli = self.acos_clients[d_key]
                 if cli['last_acos_client_creation'] + MAX_ACOS_CACHE_TIME < int(time.time()):
-                    LOG.info("Creating a new  acos_client");
+                    LOG.debug("Creating a new  acos_client");
                     acos_client = self._create_new_acos_client(cli['device_info'])
                     if acos_client is not None:
                         old_acos = cli['acos_client']
                         cli['acos_client'] = acos_client
                         cli['last_acos_client_creation'] = int(time.time())
                         self._close_old_a10_client(old_acos)
-                        LOG.info("New Acos Client created successfully")
+                        LOG.debug("New Acos Client created successfully")
                 return cli['acos_client']
         else:
             acos_client = self._create_new_acos_client(d)
             self.acos_clients[d_key] = {'device_info':d,'acos_client':acos_client,'last_acos_client_creation':int(time.time())}
             return acos_client
 
-
     def _create_new_acos_client(self, d, sleep_time_on_error=0.5):
         client = acos_client.Client(d['host'],
-                          d.get('api_version', acos_client.AXAPI_21),
+                          d.get('api_version', acos_client.AXAPI_30),
                           d['username'], d['password'],
                           port=d['port'], protocol=d['protocol'])
         final_client = None
