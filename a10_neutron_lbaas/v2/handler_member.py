@@ -49,14 +49,16 @@ class MemberHandler(handler_base_v2.HandlerBaseV2):
         server_name = self._meta_name(member, server_ip)
 
         status = c.client.slb.UP
+        admin_state = 'enable'
         if not member.admin_state_up:
             status = c.client.slb.DOWN
+            admin_state = 'disable'
 
         try:
             server_args = {'server': self.meta(member, 'server', {})}
             c.client.slb.server.create(server_name, server_ip,
                                        status=status,
-                                       axapi_args=server_args)
+                                       axapi_args=server_args,admin_state=admin_state)
         except (acos_errors.Exists, acos_errors.AddressSpecifiedIsInUse):
             pass
 
@@ -84,10 +86,16 @@ class MemberHandler(handler_base_v2.HandlerBaseV2):
             server_name = self._meta_name(member, server_ip)
 
             status = c.client.slb.UP
+            admin_state = 'enable'
             if not member.admin_state_up:
                 status = c.client.slb.DOWN
-
+                admin_state = 'enable'
             try:
+                server_args = {'server': self.meta(member, 'server', {})}
+                c.client.slb.server.update(server_name, server_ip,
+                                          status=status,
+                                          axapi_args=server_args,admin_state=admin_state)
+
                 member_args = {'member': self.meta(member, 'member', {})}
                 c.client.slb.service_group.member.update(
                     self._pool_name(context, pool=member.pool),
