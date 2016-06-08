@@ -89,7 +89,7 @@ class MemberHandler(handler_base_v2.HandlerBaseV2):
             admin_state = 'enable'
             if not member.admin_state_up:
                 status = c.client.slb.DOWN
-                admin_state = 'enable'
+                admin_state = 'disable'
             try:
                 server_args = {'server': self.meta(member, 'server', {})}
                 c.client.slb.server.update(server_name, server_ip,
