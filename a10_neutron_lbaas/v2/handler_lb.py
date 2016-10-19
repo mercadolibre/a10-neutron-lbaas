@@ -27,8 +27,10 @@ class LoadbalancerHandler(handler_base_v2.HandlerBaseV2):
 
     def _set(self, set_method, c, context, lb):
         status = c.client.slb.UP
+        admin_state_up = 'enable'
         if not lb.admin_state_up:
             status = c.client.slb.DOWN
+            admin_state_up = 'disable'
 
         try:
             vip_meta = self.meta(lb, 'virtual_server', {})
@@ -37,7 +39,8 @@ class LoadbalancerHandler(handler_base_v2.HandlerBaseV2):
                 self._meta_name(lb),
                 lb.vip_address,
                 status,
-                axapi_args=vip_args)
+                axapi_args=vip_args,
+                admin_state_up=admin_state_up)
         except acos_errors.Exists:
             pass
 
